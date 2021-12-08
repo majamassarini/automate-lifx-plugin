@@ -75,15 +75,22 @@ class Gateway(home.protocol.Gateway):
                 self._triggers.add((address[0], address[1]))
 
     async def run(self, other_tasks: List[Callable]):
-        self._transport, self._protocol = await self._loop.create_datagram_endpoint(
-            lambda: self._client(
-                self._wrap_tasks(other_tasks), self._triggers, self._commands
-            ),
-            local_addr=(self._address, self._port),
-        )
-        self.logger.debug(
-            "Transport {} and protocol {}.".format(self._transport, self._protocol)
-        )
+        while True:
+            on_con_lost = self._loop.create_future()
+            try:
+                self._transport, self._protocol = await self._loop.create_datagram_endpoint(
+                    lambda: self._client(on_con_lost,
+                        self._wrap_tasks(other_tasks), self._triggers, self._commands
+                    ),
+                    local_addr=(self._address, self._port),
+                )
+                try:
+                    await on_con_lost
+                finally:
+                    self._transport.close()
+            except (TimeoutError, OSError) as e:
+                self.logger.fatal(e)
+                await asyncio.sleep(60)
 
     async def writer(self, msgs: List[lifx.lan.Msg], *args):
         while not self._protocol:
