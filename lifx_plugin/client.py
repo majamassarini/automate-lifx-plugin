@@ -38,7 +38,8 @@ class Client(asyncio.DatagramProtocol):
             header, body = msg.decode()
             if header.type != lifx.lan.Header.State.acknowledgement:
                 for task in self._tasks:
-                    self._loop.create_task(task(msg))
+                    self._loop.create_task(task(msg),
+                    name="Lifx datagram received {}".format(str(msg)))
         else:
             self.logger.debug(
                 "read    {} not processed for address {}".format(data, addr)
