@@ -6,7 +6,6 @@ import lifx
 
 class Client(asyncio.DatagramProtocol):
     def __init__(self, on_con_lost, tasks, triggers, commands):
-        self._loop = asyncio.get_event_loop()
         self._transport = None
         self._tasks = set(tasks)
         self._listening_addresses = triggers
@@ -37,9 +36,12 @@ class Client(asyncio.DatagramProtocol):
             self.logger.info("read    {}".format(str(msg)))
             header, body = msg.decode()
             if header.type != lifx.lan.Header.State.acknowledgement:
+                loop = asyncio.get_running_loop()
                 for task in self._tasks:
-                    self._loop.create_task(task(msg),
-                    name="Lifx datagram received {}".format(str(msg)))
+                    loop.create_task(
+                        task(msg),
+                        name="Lifx datagram received {}".format(str(msg)),
+                    )
         else:
             self.logger.debug(
                 "read    {} not processed for address {}".format(data, addr)
@@ -47,36 +49,33 @@ class Client(asyncio.DatagramProtocol):
 
 
 class ClientExample(Client):
-    @asyncio.coroutine
-    def send_cmds_to(self, addr, protocol):
+    async def send_cmds_to(self, addr, protocol):
         header = lifx.lan.Header()
         header.type = lifx.lan.Header.State.set_color_light
         header.field.tagged = 1
         header.field.addressable = 1
         header.field.res_required = 1
-        # header.field.source = 1234
         body = lifx.lan.light.SetColor()
         body.field.color.rgb = (0, 255, 0)
         body.field.color.kelvin = 3500
         body.field.duration = 1024
-        # header.field.sequence = 3
         msg = lifx.lan.Msg.encode(header, body, addr=addr, port=56700)
-        yield from protocol.send_msg(msg)
-        yield from asyncio.sleep(1)
+        await protocol.send_msg(msg)
+        await asyncio.sleep(1)
         body.field.color.rgb = (0, 0, 255)
         header.field.sequence = 4
         msg = lifx.lan.Msg.encode(header, body, addr=addr, port=56700)
-        yield from protocol.send_msg(msg)
-        yield from asyncio.sleep(1)
+        await protocol.send_msg(msg)
+        await asyncio.sleep(1)
         body.field.color.rgb = (255, 0, 0)
         header.field.sequence = 5
         msg = lifx.lan.Msg.encode(header, body, addr=addr, port=56700)
-        yield from protocol.send_msg(msg)
+        await protocol.send_msg(msg)
 
 
-@asyncio.coroutine
-def create_datagram_endpoint():
-    transport, protocol = yield from loop.create_datagram_endpoint(
+async def create_datagram_endpoint():
+    loop = asyncio.get_running_loop()
+    transport, protocol = await loop.create_datagram_endpoint(
         lambda: ClientExample(
             [], [("172.31.10.245", 56700)], [("172.31.10.245", 56700)]
         ),
@@ -93,8 +92,11 @@ if __name__ == "__main__":
     handler = logging.StreamHandler(sys.stdout)
     root.addHandler(handler)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
     transport, protocol = loop.run_until_complete(
         loop.create_task(create_datagram_endpoint())
     )
-    loop.run_until_complete(loop.create_task(protocol.send_cmds_to("172.31.10.245")))
+    loop.run_until_complete(
+        loop.create_task(protocol.send_cmds_to("172.31.10.245"))
+    )
