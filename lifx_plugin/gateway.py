@@ -1,7 +1,8 @@
 import asyncio
 import logging
 
-from typing import List, Type, Callable
+from collections.abc import Callable
+from typing import Optional, Type
 
 import home
 import lifx
@@ -14,7 +15,7 @@ class Gateway(home.protocol.Gateway):
     >>> import asyncio
     >>> import lifx_plugin
 
-    >>> loop = asyncio.get_event_loop()
+    >>> loop = asyncio.new_event_loop()
 
     >>> description = {"type": "lifx",
     ...                 "name": "SetColor",
@@ -49,14 +50,13 @@ class Gateway(home.protocol.Gateway):
     def __init__(
         self, client: Type[Client], address: str = "0.0.0.0", port: int = 56700
     ):
-        self._transport = None
-        self._protocol = None
+        self._transport: Optional[asyncio.DatagramTransport] = None
+        self._protocol: Optional[Client] = None
         self._client = client
         self._address = address
         self._port = port
-        self._triggers = set()
-        self._commands = set()
-        self._loop = asyncio.get_event_loop()
+        self._triggers: set[tuple[str, int]] = set()
+        self._commands: set[tuple[str, int]] = set()
 
         self.logger = logging.getLogger(__name__)
 
@@ -64,35 +64,42 @@ class Gateway(home.protocol.Gateway):
         if self._transport:
             self._transport.close()
 
-    def associate_commands(self, descriptions: List[Description]):
+    def associate_commands(self, descriptions: list[Description]):
         for command in descriptions:
             for address in command.addresses:
                 self._commands.add((address[0], address[1]))
 
-    def associate_triggers(self, descriptions: List[Description]):
+    def associate_triggers(self, descriptions: list[Description]):
         for trigger in descriptions:
             for address in trigger.addresses:
                 self._triggers.add((address[0], address[1]))
 
-    async def run(self, other_tasks: List[Callable]):
+    async def run(self, other_tasks: list[Callable]):
+        loop = asyncio.get_running_loop()
         while True:
-            on_con_lost = self._loop.create_future()
+            on_con_lost = loop.create_future()
             try:
-                self._transport, self._protocol = await self._loop.create_datagram_endpoint(
-                    lambda: self._client(on_con_lost,
-                        self._wrap_tasks(other_tasks), self._triggers, self._commands
-                    ),
-                    local_addr=(self._address, self._port),
+                (self._transport, self._protocol) = (
+                    await loop.create_datagram_endpoint(
+                        lambda: self._client(
+                            on_con_lost,
+                            self._wrap_tasks(other_tasks),
+                            self._triggers,
+                            self._commands,
+                        ),
+                        local_addr=(self._address, self._port),
+                    )
                 )
                 try:
                     await on_con_lost
                 finally:
-                    self._transport.close()
+                    if self._transport is not None:
+                        self._transport.close()
             except (TimeoutError, OSError) as e:
                 self.logger.fatal(e)
                 await asyncio.sleep(60)
 
-    async def writer(self, msgs: List[lifx.lan.Msg], *args):
+    async def writer(self, msgs: list[lifx.lan.Msg], *args):
         while not self._protocol:
             await asyncio.sleep(0.1)
         for msg in msgs:

@@ -1,2 +1,0 @@
-git+git://github.com/majamassarini/lifx-lib.git
-git+git://github.com/majamassarini/automate-home.git

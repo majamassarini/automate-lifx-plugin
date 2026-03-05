@@ -1,7 +1,7 @@
 import home
-from typing import NewType, Sequence, TypeVar, Tuple
+from typing import NewType, TypeVar
 
-Address = NewType("Address", Sequence[Tuple[str, int]])
+Address = NewType("Address", tuple[str, int])
 
 
 Mixin = TypeVar(
