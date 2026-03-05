@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import copy
 import logging
 import functools
-
-from typing import List
+from typing import Any, ClassVar, Optional
 
 import home
 import lifx
@@ -52,7 +53,11 @@ class Description(home.protocol.Description):
 
     PROTOCOL = "lifx"
 
-    State = {"name": "Fake", "fields": {}, "addresses": []}
+    State: ClassVar[dict[str, Any]] = {
+        "name": "Fake",
+        "fields": {},
+        "addresses": [],
+    }
 
     def __init__(self, data: dict):
         super(Description, self).__init__(data)
@@ -77,28 +82,30 @@ class Description(home.protocol.Description):
         return False
 
     def __hash__(self):
-        return hash("{}{}".format(self.state.__class__.__name__, self._addresses))
+        return hash(
+            "{}{}".format(self.state.__class__.__name__, self._addresses)
+        )
 
     @property
     def state(self) -> home.appliance.State:
         return self._state
 
     @property
-    def addresses(self) -> List[Address]:
+    def addresses(self) -> list[Address]:
         return self._addresses
 
     @classmethod
-    def make(cls, addresses: List[Address]) -> "lifx_plugin.Description":
+    def make(cls, addresses: list[Address]) -> Description:
         description = copy.deepcopy(cls.State)
         description["addresses"] = addresses
         return cls(description)
 
     @classmethod
-    def make_from_yaml(cls, addresses: List[Address]) -> "lifx_plugin.Description":
+    def make_from_yaml(cls, addresses: list[Address]) -> Description:
         return cls.make(addresses)
 
     @classmethod
-    def make_from(cls, msg: lifx.lan.Msg) -> "lifx_plugin.Description":
+    def make_from(cls, msg: lifx.lan.Msg) -> Description:
         header, body = msg.decode()
         dpt_description = lifx.lan.light.Description_Factory.make(body)
         description = {
@@ -114,9 +121,14 @@ class Description(home.protocol.Description):
             lambda old_addresses, new_address: "{}, {}".format(
                 old_addresses, new_address
             ),
-            ["{}:{}".format(address[0], address[1]) for address in self._addresses]
-            if len(self._addresses)
-            else ["no address"],
+            (
+                [
+                    "{}:{}".format(address[0], address[1])
+                    for address in self._addresses
+                ]
+                if len(self._addresses)
+                else ["no address"]
+            ),
         )
         s = "{}: [{}]".format(self.state, addresses)
         return s
@@ -177,13 +189,25 @@ class Trigger(home.protocol.Trigger, Description):
     [1, 2, 3]
     """
 
+    def __init__(
+        self, description: dict, events: Optional[list[home.Event]] = None
+    ):
+        super().__init__(description, events)  # type: ignore[call-arg]
+
     def is_triggered(self, another_description: Description) -> bool:
         if super(Trigger, self).is_triggered(another_description):
             try:
                 if set(
-                    [(addr, port) for addr, port in another_description.addresses]
-                ).intersection(set([(addr, port) for addr, port in self.addresses])):
-                    self._logger.info("triggered {}".format(another_description))
+                    [
+                        (addr, port)
+                        for addr, port in another_description.addresses
+                    ]
+                ).intersection(
+                    set([(addr, port) for addr, port in self.addresses])
+                ):
+                    self._logger.info(
+                        "triggered {}".format(another_description)
+                    )
                     return True
                 else:
                     return False
@@ -194,19 +218,24 @@ class Trigger(home.protocol.Trigger, Description):
                     another_description.addresses,
                     self.addresses,
                 )
+        return False
 
     @classmethod
     def make(
-        cls, addresses: List[Address], events: List[home.Event] = None
-    ) -> "lifx_plugin.Trigger":
+        cls,
+        addresses: list[Address],
+        events: Optional[list[home.Event]] = None,
+    ) -> Trigger:
         description = copy.deepcopy(cls.State)
         description["addresses"] = addresses
         return cls(description, events)
 
     @classmethod
     def make_from_yaml(
-        cls, addresses: List[Address], events: List[home.Event] = None
-    ) -> "lifx_plugin.Trigger":
+        cls,
+        addresses: list[Address],
+        events: Optional[list[home.Event]] = None,
+    ) -> Trigger:
         return cls.make(addresses, events)
 
     def __str__(self, *args, **kwargs):
@@ -214,9 +243,14 @@ class Trigger(home.protocol.Trigger, Description):
             lambda old_addresses, new_address: "{}, {}".format(
                 old_addresses, new_address
             ),
-            ["{}:{}".format(address[0], address[1]) for address in self._addresses]
-            if len(self._addresses)
-            else ["no address"],
+            (
+                [
+                    "{}:{}".format(address[0], address[1])
+                    for address in self._addresses
+                ]
+                if len(self._addresses)
+                else ["no address"]
+            ),
         )
         s = "Trigger {} from [{}]".format(self.state, addresses)
         return s
@@ -245,7 +279,7 @@ class Command(Description, home.protocol.Command):
     Command SetColor {hue: 20, saturation: 20, brightness: 20, kelvin: 3500, rgb: (51, 44, 41), duration: 1024} to [172.31.10.245:56700]
     """
 
-    def execute(self) -> List[lifx.lan.Msg]:
+    def execute(self) -> list[lifx.lan.Msg]:
         req_msgs = []
         for address in self._addresses:
             msg = lifx.lan.Msg.encode(
@@ -260,8 +294,10 @@ class Command(Description, home.protocol.Command):
         return req_msgs
 
     def make_msgs_from(
-        self, old_state: home.appliance.State, new_state: home.appliance.State
-    ) -> List[lifx.lan.Msg]:
+        self,
+        old_state: home.appliance.State,
+        new_state: home.appliance.State,
+    ) -> list[lifx.lan.Msg]:
         return []
 
     def __str__(self, *args, **kwargs):
@@ -269,9 +305,14 @@ class Command(Description, home.protocol.Command):
             lambda old_addresses, new_address: "{}, {}".format(
                 old_addresses, new_address
             ),
-            ["{}:{}".format(address[0], address[1]) for address in self._addresses]
-            if len(self._addresses)
-            else ["no address"],
+            (
+                [
+                    "{}:{}".format(address[0], address[1])
+                    for address in self._addresses
+                ]
+                if len(self._addresses)
+                else ["no address"]
+            ),
         )
         s = "Command {} to [{}]".format(self.state, addresses)
         return s
