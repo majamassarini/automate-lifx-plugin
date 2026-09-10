@@ -1,0 +1,16 @@
+*.pyc
+__pycache__/
+.settings
+.project
+.pydevproject
+.idea
+.workspace.xml
+build/
+dist/
+*.egg-info/
+docs/build/
+htmlcov/
+.coverage
+coverage.xml
+venv/
+.env

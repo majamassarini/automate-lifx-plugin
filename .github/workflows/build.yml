@@ -78,6 +78,18 @@ jobs:
           python -m doctest lifx_plugin/trigger.py -v
           python -m doctest lifx_plugin/command.py -v
 
+      - name: Generate coverage report
+        run: |
+          python -m coverage report -m
+          python -m coverage xml
+
+      - name: Upload coverage to Codecov
+        if: matrix.python-version == '3.14'
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: coverage.xml
+
   docs:
     runs-on: ubuntu-latest
     steps:
