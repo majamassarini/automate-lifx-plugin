@@ -16,13 +16,37 @@ on:
         required: false
         default: "dev"
 
-env:
-  AUTOMATE_HOME_BRANCH: ${{ github.event.inputs.automate_home_branch || github.base_ref || github.ref_name || 'dev' }}
-  LIFX_LIB_BRANCH: ${{ github.event.inputs.lifx_lib_branch || github.base_ref || github.ref_name || 'dev' }}
-
 jobs:
-  checks:
+  resolve-branches:
     runs-on: ubuntu-latest
+    outputs:
+      automate_home_branch: ${{ steps.resolve.outputs.automate_home_branch }}
+      lifx_lib_branch: ${{ steps.resolve.outputs.lifx_lib_branch }}
+    steps:
+      - name: Resolve companion repo branches
+        id: resolve
+        env:
+          REQUESTED_HOME_BRANCH: ${{ github.event.inputs.automate_home_branch || github.base_ref || github.ref_name || 'dev' }}
+          REQUESTED_LIFX_BRANCH: ${{ github.event.inputs.lifx_lib_branch || github.base_ref || github.ref_name || 'dev' }}
+        run: |
+          resolve() {
+            local repo="$1" branch="$2"
+            if git ls-remote --exit-code --heads "https://github.com/majamassarini/${repo}.git" "$branch" > /dev/null 2>&1; then
+              echo "$branch"
+            else
+              echo "main"
+            fi
+          }
+
+          echo "automate_home_branch=$(resolve automate-home "$REQUESTED_HOME_BRANCH")" >> "$GITHUB_OUTPUT"
+          echo "lifx_lib_branch=$(resolve lifx-lib "$REQUESTED_LIFX_BRANCH")" >> "$GITHUB_OUTPUT"
+
+  checks:
+    needs: resolve-branches
+    runs-on: ubuntu-latest
+    env:
+      AUTOMATE_HOME_BRANCH: ${{ needs.resolve-branches.outputs.automate_home_branch }}
+      LIFX_LIB_BRANCH: ${{ needs.resolve-branches.outputs.lifx_lib_branch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -47,10 +71,14 @@ jobs:
         run: mypy lifx_plugin
 
   test:
+    needs: resolve-branches
     runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: ["3.12", "3.13", "3.14"]
+    env:
+      AUTOMATE_HOME_BRANCH: ${{ needs.resolve-branches.outputs.automate_home_branch }}
+      LIFX_LIB_BRANCH: ${{ needs.resolve-branches.outputs.lifx_lib_branch }}
     steps:
       - uses: actions/checkout@v4
 
@@ -91,7 +119,11 @@ jobs:
           files: coverage.xml
 
   docs:
+    needs: resolve-branches
     runs-on: ubuntu-latest
+    env:
+      AUTOMATE_HOME_BRANCH: ${{ needs.resolve-branches.outputs.automate_home_branch }}
+      LIFX_LIB_BRANCH: ${{ needs.resolve-branches.outputs.lifx_lib_branch }}
     steps:
       - uses: actions/checkout@v4
 
